@@ -16,5 +16,5 @@ import {
   type NodeProps,
 } from '@xyflow/react'
 import {
-  Plus, Serach, Command, PanelLeftClose, PanelRightClose, ChevronDown, MoreHorizontal
+  Plus, Search, Command, PanelLeftClose, PanelRightClose, ChevronDown, MoreHorizontal
 }
