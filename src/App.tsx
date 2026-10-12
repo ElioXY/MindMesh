@@ -260,6 +260,11 @@ return (
               <span className="map-list-text">{mapName}</span>
               <span className="map-list-text">Untitled notes</span>
             </button>
+            <button className = "map-list-item">
+              <span className="map list-icon folder-icon"><Folder size={15} /></span>
+              <span className="map-list-text">Untitled notes</span>
+
+            </button>
           </div>
 
 
