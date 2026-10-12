@@ -6,4 +6,4 @@ export type Note = {
     updatedAt: number
 }
 
-export type ViewNode = 'edit' | 'split' | 'preview' | 'graph'
+export type ViewMode = 'edit' | 'split' | 'preview' | 'graph'
