@@ -24,7 +24,49 @@ export default function Palette() {
       { label: 'Toggle sidebar', run: () => s.toggleSidebar() },
     ]
     if (active) {
-        cmds.push(
-            { label: `Export "${active.title}" as .md`, run: () => download(`${active.title}`)}
-        )
+      cmds.push(
+        { label: `Export “${active.title}” as .md`, run: () => download(`${active.title}.md`, active.content, 'text/markdown') },
+        { label: `Delete “${active.title}”`, run: () => s.deleteNote(active.id) },
+      )
     }
+    const noteItems: Item[] = s.notes.map((n) => ({ label: n.title, hint: 'note', run: () => s.openNote(n.id) }))
+    const query = q.trim().toLowerCase()
+    const all = [...noteItems, ...cmds]
+    const filtered = query ? all.filter((x) => x.label.toLowerCase().includes(query)) : all
+    if (query && !s.notes.some((n) => n.title.toLowerCase() === query)) {
+      filtered.push({ label: `Create note “${q.trim()}”`, run: () => s.createNote(q.trim()) })
+    }
+    return filtered.slice(0, 12)
+  }, [q, s.notes, s.activeId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!s.paletteOpen) return null
+  const close = () => s.setPalette(false)
+  const pick = (it?: Item) => { if (it) { close(); it.run() } }
+
+  return (
+    <div className="overlay" onMouseDown={close}>
+      <div className="palette" onMouseDown={(e) => e.stopPropagation()}>
+        <input
+          ref={input}
+          placeholder="Jump to a note or run a command…"
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setI(0) }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); setI((i + 1) % Math.max(items.length, 1)) }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); setI((i - 1 + items.length) % Math.max(items.length, 1)) }
+            else if (e.key === 'Enter') pick(items[i])
+            else if (e.key === 'Escape') close()
+          }}
+        />
+        <div className="palette-list">
+          {items.map((it, idx) => (
+            <button key={it.label + idx} className={idx === i ? 'active' : ''} onMouseEnter={() => setI(idx)} onClick={() => pick(it)}>
+              <span>{it.label}</span>{it.hint && <kbd>{it.hint}</kbd>}
+            </button>
+          ))}
+          {items.length === 0 && <p className="muted">Nothing found.</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
