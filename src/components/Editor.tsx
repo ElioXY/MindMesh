@@ -45,3 +45,21 @@ export default function Editor({ id, content }: { id: string; content: string })
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (suggest && matches.length) {
+      if (e.key === 'ArrowDown') {e.preventDefault(); setSuggest({ ...suggest, index: (suggest.index + 1) % matches.length}) }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setSuggest({ ...suggest, index: (suggest.index - 1 + matches.length) % matches.length}) }
+      else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); insert(matches[suggest.index].title) }
+      else if (e.key === 'Escape') setSuggest(null)
+      return
+    }
+
+    const el = e.currentTarget
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      const s = el.selectionStart
+      update(id, content.slice(0, s) + ' ' + content.slice(el.selectionEnd))
+      requestAnimationFrame(() => el.setSelectionRange(s + 2, s + 2))
+    } else if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      const s = el.selectionStart
+      const lineStart = 
+    }
+    )
