@@ -34,5 +34,12 @@ export default function Editor({ id, content }: { id: string; content: string })
     const el = ref.current
     if (!el || !suggest) return
     const caret = el.selectionStart
-    const after = content.slice(0, suggest.start) + title + closing + after
+    const after = content.slice(caret)
+    const closing = after.startsWith(']]') ? '' : ']]'
+    const next = content.slice(0, suggest.start) + title + closing + after
+    update(id, next)
+    setSuggest(null)
+    const pos = suggest.start + title.length + 2
+    requestAnimationFrame(() => {el.focus(); el.setSelectionRange(pos, pos) })
+  }
     
