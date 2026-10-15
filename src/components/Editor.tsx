@@ -42,4 +42,6 @@ export default function Editor({ id, content }: { id: string; content: string })
     const pos = suggest.start + title.length + 2
     requestAnimationFrame(() => {el.focus(); el.setSelectionRange(pos, pos) })
   }
-    
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (suggest && matches.length) {
