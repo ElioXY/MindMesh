@@ -102,12 +102,17 @@ export default function Editor({ id, content }: { id: string; content: string })
               {n.title}
             </button>
           ))}
-          {suggest.query.trim() && !notes.some((n) => norm(suggest.query)) && (
+          {suggest.query.trim() && !notes.some((n) => norm(n.title) === norm(suggest.query)) && (
             <button
-            className="suggest-new"
-            onMouseDown={(e) => {e.preventDefault(); insert(suggest.query.trim() )}}
-          >
-            Link to new note "{suggest.query.trim()}"
-          </button>
-          )} 
-          {matches.}
+              className="suggest-new"
+              onMouseDown={(e) => { e.preventDefault(); insert(suggest.query.trim()) }}
+            >
+              Link to new note “{suggest.query.trim()}”
+            </button>
+          )}
+          {matches.length === 0 && !suggest.query.trim() && <div className="suggest-empty">Type a note title…</div>}
+        </div>
+      )}
+    </div>
+  )
+}

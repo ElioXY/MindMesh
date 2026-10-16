@@ -1,4 +1,4 @@
-import type {Note} from '../types'
+import type { Note } from '../types'
 
 const WIKILINK = /\[\[([^\]|#\n]+?)(?:#[^\]|\n]*)?(?:\|([^\]\n]*))?\]\]/g
 const TAG = /(^|\s)#([A-Za-z][\w/-]*)/g
@@ -6,23 +6,25 @@ const TAG = /(^|\s)#([A-Za-z][\w/-]*)/g
 export const norm = (s: string) => s.trim().toLowerCase()
 
 export function extractLinks(content: string): string[] {
-    const out = new Set<string>()
-    for (const m of content.matchAll(WIKILINK)) out.add(norm(m[1]))
-    return [...out]
+  const out = new Set<string>()
+  for (const m of content.matchAll(WIKILINK)) out.add(norm(m[1]))
+  return [...out]
 }
 
 export function extractTags(content: string): string[] {
-    const out = new Set<string>()
-    for (const m of content.matchAll(TAG)) out.add(m[2].toLowerCase())
-    return [...out]
+  const out = new Set<string>()
+  for (const m of content.matchAll(TAG)) out.add(m[2].toLowerCase())
+  return [...out]
 }
 
+/** Turn [[Title|alias]] into a markdown link the preview can intercept. */
 export function wikiToMarkdown(content: string): string {
-    return content.replace(WIKILINK, (_, title: string, alias?: string) => 
-        `[${alias?.trim() || title.trim()}](#wiki:${encodeURIComponent(title.trim())})`,
-    )
+  return content.replace(WIKILINK, (_, title: string, alias?: string) =>
+    `[${alias?.trim() || title.trim()}](#wiki:${encodeURIComponent(title.trim())})`,
+  )
 }
 
+/** Rewrite [[Old]] → [[New]] everywhere (keeps #heading and |alias). */
 export function renameLinks(content: string, oldTitle: string, newTitle: string): string {
   return content.replace(WIKILINK, (full, title: string) =>
     norm(title) === norm(oldTitle) ? full.replace(title, newTitle) : full,
@@ -70,7 +72,6 @@ export function linksOf(n: Note): string[] {
   if (!v) { v = extractLinks(n.content); linkCache.set(n, v) }
   return v
 }
-
 export function tagsOf(n: Note): string[] {
   let v = tagCache.get(n)
   if (!v) { v = extractTags(n.content); tagCache.set(n, v) }
