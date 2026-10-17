@@ -118,4 +118,58 @@ type State = {
 }
 
 export const useStore = create<State>((set, get) => ({
-  ready
+  ready: false,
+  notes: [],
+  activeId: null,
+  openIds: [],
+  view: 'split',
+  sidebarOpen: window.innerWidth > 800,
+  paletteOpen: false,
+  theme: (localStorage.getItem('mindmesh:theme') as Theme | null)
+    ?? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'),
+  saving: false,
+  toasts: [],
+
+  toggleTheme() {
+    const t: Theme = get().theme === 'dark' ? 'light' : 'dark'
+    const root = document.documentElement
+    root.classList.add('theme-anim')
+    applyTheme(t)
+    set({ theme: t })
+    window.setTimeout(() => root.classList.remove('theme-anim'), 350)
+  },
+
+  toast(text, actionLabel, action) {
+    const id = ++toastId
+    set((s) => ({ toasts: [...s.toasts.slice(-2), { id, text, actionLabel, action }] }))
+    window.setTimeout(() => get().dismissToast(id), actionLabel ? 6000 : 3000)
+  },
+
+  dismissToast(id) {
+    set((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, leaving: true } : t)) }))
+    window.setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 220)
+  },
+
+  restoreNote(note) {
+    void db.notes.put(note)
+    set((s) => ({ notes: [note, ...s.notes.filter((n) => n.id !== note.id)] }))
+    get().openNote(note.id)
+  },
+
+  async load() {
+    let notes = await db.notes.toArray()
+    if (notes.length === 0) {
+      const now = Date.now()
+      notes = WELCOME.map(([title, content], i) => ({
+        id: uid(), title, content, createdAt: now + i, updatedAt: now - i,
+      }))
+      await db.notes.bulkPut(notes)
+    }
+    const lastId = localStorage.getItem('mindmesh:last')
+    const first = notes.find((n) => n.id === lastId) ?? notes.find((n) => n.title === 'Welcome to MindMesh') ?? notes[0]
+    set({ notes, ready: true, activeId: first.id, openIds: [first.id] })
+  },
+
+  createNote(title = 'Untitled', content) {
+
+  }
