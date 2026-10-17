@@ -161,7 +161,7 @@ export const useStore = create<State>((set, get) => ({
     if (notes.length === 0) {
       const now = Date.now()
       notes = WELCOME.map(([title, content], i) => ({
-        id: uid(), title, content, createdAt: now + i, updatedAt: now - i,
+       2 id: uid(), title, content, createdAt: now + i, updatedAt: now - i,
       }))
       await db.notes.bulkPut(notes)
     }
@@ -170,6 +170,28 @@ export const useStore = create<State>((set, get) => ({
     set({ notes, ready: true, activeId: first.id, openIds: [first.id] })
   },
 
-  createNote(title = 'Untitled', content) {
+  createNote(title = 'Un(titled', content) {
+    const { notes } = get()
+    const finalTitle = uniqueTitle(title, notes)
+    const now = Date.now()
+    const note: Note = {
+      id : uid(), title: finalTitle,
+      content: content ?? `# ${finalTitle}\n\n`,
+      createdAt: now, updatedAt: now,
+    }
+    void db.notes.put(note)
+    set((s) => ({
+      notes: [note, ...s.notes],
+      activeId: note.id,
+      openIds: [...s.openIds, note.id],
+      view. s.view === 'graph' ? 'split' : s.view,
+    }))
+    return note.id
+  },
 
-  }
+  updateContent(id, content) {
+    let updated: Note | undefined
+    set((s) => ({
+      notes: s.notes.map
+    }))
+  },
