@@ -161,7 +161,7 @@ export const useStore = create<State>((set, get) => ({
     if (notes.length === 0) {
       const now = Date.now()
       notes = WELCOME.map(([title, content], i) => ({
-       2 id: uid(), title, content, createdAt: now + i, updatedAt: now - i,
+        id: uid(), title, content, createdAt: now + i, updatedAt: now - i,
       }))
       await db.notes.bulkPut(notes)
     }
@@ -170,12 +170,12 @@ export const useStore = create<State>((set, get) => ({
     set({ notes, ready: true, activeId: first.id, openIds: [first.id] })
   },
 
-  createNote(title = 'Un(titled', content) {
+  createNote(title = 'Untitled', content) {
     const { notes } = get()
     const finalTitle = uniqueTitle(title, notes)
     const now = Date.now()
     const note: Note = {
-      id : uid(), title: finalTitle,
+      id: uid(), title: finalTitle,
       content: content ?? `# ${finalTitle}\n\n`,
       createdAt: now, updatedAt: now,
     }
@@ -184,7 +184,7 @@ export const useStore = create<State>((set, get) => ({
       notes: [note, ...s.notes],
       activeId: note.id,
       openIds: [...s.openIds, note.id],
-      view. s.view === 'graph' ? 'split' : s.view,
+      view: s.view === 'graph' ? 'split' : s.view,
     }))
     return note.id
   },
@@ -192,6 +192,98 @@ export const useStore = create<State>((set, get) => ({
   updateContent(id, content) {
     let updated: Note | undefined
     set((s) => ({
-      notes: s.notes.map
+      notes: s.notes.map((n) => {
+        if (n.id !== id) return n
+        updated = { ...n, content, updatedAt: Date.now() }
+        return updated
+      }),
+    }))
+    if (updated) persist(updated)
+  },
+
+  renameNote(id, raw) {
+    const { notes } = get()
+    const target = notes.find((n) => n.id === id)
+    if (!target) return
+    const title = uniqueTitle(raw, notes, id)
+    if (title === target.title) return
+    const now = Date.now()
+    const changed: Note[] = []
+    const next = notes.map((n) => {
+      let m = n
+      if (n.id === id) m = { ...n, title, updatedAt: now }
+      const rewritten = renameLinks(m.content, target.title, title)
+      if (rewritten !== m.content) m = { ...m, content: rewritten, updatedAt: now }
+      if (m !== n) changed.push(m)
+      return m
+    })
+    void db.notes.bulkPut(changed)
+    set({ notes: next })
+  },
+
+  deleteNote(id) {
+    const removed = get().notes.find((n) => n.id === id)
+    if (!removed) return
+    window.clearTimeout(timers.get(id))
+    void db.notes.delete(id)
+    get().toast(`Deleted “${removed.title}”`, 'Undo', () => get().restoreNote(removed))
+    set((s) => {
+      const openIds = s.openIds.filter((x) => x !== id)
+      const activeId = s.activeId === id ? (openIds.at(-1) ?? null) : s.activeId
+      return { notes: s.notes.filter((n) => n.id !== id), openIds, activeId }
+    })
+  },
+
+  openNote(id) {
+    localStorage.setItem('mindmesh:last', id)
+    set((s) => ({
+      activeId: id,
+      openIds: s.openIds.includes(id) ? s.openIds : [...s.openIds, id],
+      view: s.view === 'graph' ? 'split' : s.view,
     }))
   },
+
+  openByTitle(title) {
+    const found = get().notes.find((n) => norm(n.title) === norm(title))
+    if (found) get().openNote(found.id)
+    else get().createNote(title)
+  },
+
+  closeTab(id) {
+    set((s) => {
+      const openIds = s.openIds.filter((x) => x !== id)
+      const activeId = s.activeId === id ? (openIds.at(-1) ?? null) : s.activeId
+      return { openIds, activeId }
+    })
+  },
+
+  setView: (view) => set({ view }),
+  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+  setPalette: (paletteOpen) => set({ paletteOpen }),
+
+  importNotes(items) {
+    const now = Date.now()
+    let notes = get().notes
+    const added: Note[] = []
+    for (const it of items) {
+      const title = uniqueTitle(it.title || 'Imported', [...notes, ...added])
+      added.push({
+        id: uid(), title, content: it.content ?? '',
+        createdAt: it.createdAt ?? now, updatedAt: it.updatedAt ?? now,
+      })
+    }
+    void db.notes.bulkPut(added)
+    notes = [...added, ...notes]
+    set({ notes })
+    return added.length
+  },
+
+  dailyNote() {
+    const title = new Date().toISOString().slice(0, 10)
+    const found = get().notes.find((n) => n.title === title)
+    if (found) get().openNote(found.id)
+    else get().createNote(title, `# ${title}\n\n- \n`)
+  },
+}))
+
+applyTheme(useStore.getState().theme)
