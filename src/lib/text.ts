@@ -1,27 +1,38 @@
 import type { Note } from '../types'
 
-const WIKILINK = /\[\[([^\]|#\n]+?)(?:#[^\]|\n]*)?(?:\|([^\]\n]*))?\]\]/g
+const WIKILINK = /\[\[([^\]|#\n[]+?)(?:#[^\]|\n]*)?(?:\|([^\]\n]*))?\]\]/g
 const TAG = /(^|\s)#([A-Za-z][\w/-]*)/g
 
 export const norm = (s: string) => s.trim().toLowerCase()
 
+const CODE = /```[\s\S]*?```|`[^`\n]*`/g
+const stripCode = (c: string) => c.replace(CODE, ' ')
+
 export function extractLinks(content: string): string[] {
   const out = new Set<string>()
-  for (const m of content.matchAll(WIKILINK)) out.add(norm(m[1]))
+  for (const m of stripCode(content).matchAll(WIKILINK)) out.add(norm(m[1]))
   return [...out]
 }
 
 export function extractTags(content: string): string[] {
   const out = new Set<string>()
-  for (const m of content.matchAll(TAG)) out.add(m[2].toLowerCase())
+  for (const m of stripCode(content).matchAll(TAG)) out.add(m[2].toLowerCase())
   return [...out]
 }
 
 /** Turn [[Title|alias]] into a markdown link the preview can intercept. */
 export function wikiToMarkdown(content: string): string {
-  return content.replace(WIKILINK, (_, title: string, alias?: string) =>
+  const conv = (text: string) => text.replace(WIKILINK, (_, title: string, alias?: string) =>
     `[${alias?.trim() || title.trim()}](#wiki:${encodeURIComponent(title.trim())})`,
   )
+  // leave code spans and fenced blocks untouched
+  let out = ''
+  let last = 0
+  for (const m of content.matchAll(CODE)) {
+    out += conv(content.slice(last, m.index)) + m[0]
+    last = m.index + m[0].length
+  }
+  return out + conv(content.slice(last))
 }
 
 /** Rewrite [[Old]] → [[New]] everywhere (keeps #heading and |alias). */
