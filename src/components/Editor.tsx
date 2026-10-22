@@ -1,6 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
+import { Annotation, Compartment, EditorState } from '@codemirror/state'
+import { EditorView, drawSelection, keymap, placeholder } from '@codemirror/view'
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { autocompletion, completionKeymap } from '@codemirror/autocomplete'
 import { useStore } from '../store'
-import { norm } from '../lib/text'
+import { norm } from '../store'
+import { livePreview, refreshEffect } from '../lib/livePreview'
+import { slashSource,  wikiSource } from '../lib/completions'
+
+const External = Annotation.define<boolean>()
+
+export default function Editor ({ id, content, live }: { id: string; content: string; live: boolean }) {
+  const host = useRef<HTMLDivElement>(null)
+  const viewRef = useRef<EditorView | null>(null)
+}
 
 type Suggest = { start: number; query: string; index: number }
 

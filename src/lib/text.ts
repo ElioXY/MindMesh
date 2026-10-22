@@ -77,7 +77,7 @@ export function timeAgo(ts: number): string {
 
 const linkCache = new WeakMap<Note, string[]>()
 const tagCache = new WeakMap<Note, string[]>()
-/** Cached per note object; notes are immutable so identity change = content change. */
+
 export function linksOf(n: Note): string[] {
   let v = linkCache.get(n)
   if (!v) { v = extractLinks(n.content); linkCache.set(n, v) }
