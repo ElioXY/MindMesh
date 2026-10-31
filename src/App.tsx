@@ -1,36 +1,23 @@
 import { lazy, Suspense, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import {
-  PanelLeft, X, Command, Pencil, Columns2, Eye, Network, Trash2, Link2, Hash, Download, Sun, Moon, ChevronUp,
-  DotSquare,
-  SquareCenterlineDashedVertical,
-  LucideSlidersVertical,
-  AlignVerticalDistributeEndIcon,
-  AlignVerticalDistributeStart,
-  SquareCenterlineDashedVerticalIcon,
-  DollarSign,
-  ImageDownIcon,
-  ImagePlay,
-  Binary,
-  MapPin,
-  Scale3DIcon,
-  Ghost,
-  FaceSlightlySmiling,
-  MoveUpRightIcon,
-  ContactRoundIcon,
+  PanelLeft, X, Command, Pencil, Code, Columns2, Eye, Network, Trash2, Link2, Hash, Download, Sun, Moon, ChevronUp,
+  Pin, PinOff, Share2,
 } from 'lucide-react'
 import { useStore } from './store'
 import Sidebar from './components/Sidebar'
-import Editor from './components/Editor'
-import Preview from './components/Preview'
+import LocalGraph from './components/LocalGraph'
 import Palette from './components/Palette'
 import Toasts from './components/Toasts'
 import { download, linksOf, norm, tagsOf } from './lib/text'
 import type { ViewMode } from './types'
 
 const Graph = lazy(() => import('./components/Graph'))
+const Editor = lazy(() => import('./components/Editor'))
+const Preview = lazy(() => import('./components/Preview'))
 
 const VIEWS: Array<[ViewMode, string, typeof Pencil]> = [
-  ['edit', 'Edit', Pencil],
+  ['live', 'Live', Pencil],
+  ['source', 'Source', Code],
   ['split', 'Split', Columns2],
   ['preview', 'Preview', Eye],
   ['graph', 'Graph', Network],
@@ -45,6 +32,7 @@ export default function App() {
   const sidebarOpen = useStore((s) => s.sidebarOpen)
   const theme = useStore((s) => s.theme)
   const saving = useStore((s) => s.saving)
+  const lgOpen = useStore((s) => s.localGraphOpen)
   const s = useStore.getState()
   const [metaOpen, setMetaOpen] = useState(true)
 
@@ -56,7 +44,7 @@ export default function App() {
       const mod = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
       if (mod && k === 'k') { e.preventDefault(); st.setPalette(!st.paletteOpen) }
-      else if (mod && k === 'e') { e.preventDefault(); st.setView(st.view === 'edit' ? 'preview' : 'edit') }
+      else if (mod && k === 'e') { e.preventDefault(); st.setView(st.view === 'live' ? 'source' : 'live') }
       else if (e.altKey && k === 'n') { e.preventDefault(); st.createNote() }
     }
     window.addEventListener('keydown', onKey)
@@ -134,69 +122,81 @@ export default function App() {
               <div className="graph-wrap"><Graph /></div>
             </Suspense>
           ) : active ? (
-            <>
-              <div key={active.id} className={`note-view ${view === 'split' ? '' : 'solo'}`}>
-                <div className="note-head">
-                  <input
-                    className="title-input"
-                    aria-label="Note title"
-                    defaultValue={active.title}
-                    onBlur={(e) => {
-                      s.renameNote(active.id, e.target.value)
-                      e.target.value = useStore.getState().notes.find((n) => n.id === active.id)?.title ?? active.title
-                    }}
-                    onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                  />
-                  <div className="note-actions">
-                    <button className="icon-btn" title="Export as .md" aria-label="Export as Markdown" onClick={() => { download(`${active.title}.md`, active.content, 'text/markdown'); s.toast('Exported as Markdown') }}><Download size={15} /></button>
-                    <button className="icon-btn danger" title="Delete note" aria-label="Delete note" onClick={() => s.deleteNote(active.id)}><Trash2 size={15} /></button>
+            <div className="note-shell">
+              <div className="note-col">
+                <div key={active.id} className={`note-view ${view === 'split' ? '' : 'solo'}`}>
+                  <div className="note-head">
+                    <div className="title-col">
+                      {active.folder && <div className="crumb">{active.folder.split('/').join(' / ')}</div>}
+                      <input
+                        className="title-input"
+                        aria-label="Note title"
+                        defaultValue={active.title}
+                        onBlur={(e) => {
+                          s.renameNote(active.id, e.target.value)
+                          e.target.value = useStore.getState().notes.find((n) => n.id === active.id)?.title ?? active.title
+                        }}
+                        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                      />
+                    </div>
+                    <div className="note-actions">
+                      <button className={`icon-btn ${active.pinned ? 'on' : ''}`} title={active.pinned ? 'Unpin note' : 'Pin note'} aria-label={active.pinned ? 'Unpin note' : 'Pin note'} aria-pressed={!!active.pinned} onClick={() => s.togglePin(active.id)}>
+                        {active.pinned ? <PinOff size={15} /> : <Pin size={15} />}
+                      </button>
+                      <button className={`icon-btn lg-toggle ${lgOpen ? 'on' : ''}`} title="Local graph" aria-label="Toggle local graph" aria-pressed={lgOpen} onClick={() => s.setLocalGraph(!lgOpen)}><Share2 size={15} /></button>
+                      <button className="icon-btn" title="Export as .md" aria-label="Export as Markdown" onClick={() => { download(`${active.title}.md`, active.content, 'text/markdown'); s.toast('Exported as Markdown') }}><Download size={15} /></button>
+                      <button className="icon-btn danger" title="Delete note" aria-label="Delete note" onClick={() => s.deleteNote(active.id)}><Trash2 size={15} /></button>
+                    </div>
+                  </div>
+
+                  <div className={`panes ${view}`}>
+                    <Suspense fallback={<div className="pane-wait" />}>
+                      {view !== 'preview' && <Editor id={active.id} content={active.content} live={view === 'live'} />}
+                    {(view === 'split' || view === 'preview') && <div className="preview-scroll pane-in"><Preview content={deferredContent} /></div>}
+                    </Suspense>
                   </div>
                 </div>
 
-                <div className={`panes ${view}`}>
-                  {view !== 'preview' && <Editor id={active.id} content={active.content} />}
-                  {view !== 'edit' && <div className="preview-scroll pane-in"><Preview content={deferredContent} /></div>}
-                </div>
-              </div>
-
-              <div className={`meta-wrap ${metaOpen ? '' : 'closed'}`}>
-                <div className="meta-clip">
-                  <div className="meta">
-                    <div className="meta-col">
-                      <h4><Link2 size={13} /> Backlinks <span>{backlinks.length}</span></h4>
-                      {backlinks.length === 0 && <p className="muted">No notes link here yet.</p>}
-                      {backlinks.map((n) => <button key={n.id} className="link-row" onClick={() => s.openNote(n.id)}>{n.title}</button>)}
-                    </div>
-                    <div className="meta-col">
-                      <h4><Link2 size={13} /> Links out <span>{outgoing.length}</span></h4>
-                      {outgoing.length === 0 && <p className="muted">Type [[ to link another note.</p>}
-                      {outgoing.map((o) => (
-                        <button key={o.title} className={`link-row ${o.exists ? '' : 'missing'}`} onClick={() => s.openByTitle(o.title)}>
-                          {o.title}{!o.exists && ' (create)'}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="meta-col">
-                      <h4><Hash size={13} /> Tags <span>{tags.length}</span></h4>
-                      <div className="tag-cloud">
-                        {tags.length === 0 && <p className="muted">Type #idea to add a tag.</p>}
-                        {tags.map((t) => <span key={t} className="chip">#{t}</span>)}
+                <div className={`meta-wrap ${metaOpen ? '' : 'closed'}`}>
+                  <div className="meta-clip">
+                    <div className="meta">
+                      <div className="meta-col">
+                        <h4><Link2 size={13} /> Backlinks <span>{backlinks.length}</span></h4>
+                        {backlinks.length === 0 && <p className="muted">No notes link here yet.</p>}
+                        {backlinks.map((n) => <button key={n.id} className="link-row" onClick={() => s.openNote(n.id)}>{n.title}</button>)}
+                      </div>
+                      <div className="meta-col">
+                        <h4><Link2 size={13} /> Links out <span>{outgoing.length}</span></h4>
+                        {outgoing.length === 0 && <p className="muted">Type [[ to link another note.</p>}
+                        {outgoing.map((o) => (
+                          <button key={o.title} className={`link-row ${o.exists ? '' : 'missing'}`} onClick={() => s.openByTitle(o.title)}>
+                            {o.title}{!o.exists && ' (create)'}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="meta-col">
+                        <h4><Hash size={13} /> Tags <span>{tags.length}</span></h4>
+                        <div className="tag-cloud">
+                          {tags.length === 0 && <p className="muted">Type #idea to add a tag.</p>}
+                          {tags.map((t) => <span key={t} className="chip">#{t}</span>)}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <footer className="status">
-                <button className="status-toggle" onClick={() => setMetaOpen(!metaOpen)} aria-expanded={metaOpen}>
-                  <ChevronUp size={13} className="chev" /> Links and tags
-                </button>
-                <span className="status-right">
-                  <span>{words} {words === 1 ? 'word' : 'words'}</span>
-                  <span className={`save ${saving ? 'saving' : ''}`}><i />{saving ? 'Saving' : 'Saved'}</span>
-                </span>
-              </footer>
-            </>
+                <footer className="status">
+                  <button className="status-toggle" onClick={() => setMetaOpen(!metaOpen)} aria-expanded={metaOpen}>
+                    <ChevronUp size={13} className="chev" /> Links and tags
+                  </button>
+                  <span className="status-right">
+                    <span>{words} {words === 1 ? 'word' : 'words'}</span>
+                    <span className={`save ${saving ? 'saving' : ''}`}><i />{saving ? 'Saving' : 'Saved'}</span>
+                  </span>
+                </footer>
+              </div>
+              <LocalGraph />
+            </div>
           ) : (
             <div className="empty">
               <div className="empty-mark" />
@@ -212,4 +212,3 @@ export default function App() {
     </div>
   )
 }
-
