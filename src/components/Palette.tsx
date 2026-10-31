@@ -16,7 +16,9 @@ export default function Palette() {
     const cmds: Item[] = [
       { label: 'New note', hint: 'Alt N', run: () => s.createNote() },
       { label: "Open today's note", run: () => s.dailyNote() },
-      { label: 'View: Edit', run: () => s.setView('edit') },
+      { label: 'View: Live preview', run: () => s.setView('live') },
+      { label: 'View: Source', run: () => s.setView('source') },
+      { label: s.localGraphOpen ? 'Hide local graph' : 'Show local graph', run: () => s.setLocalGraph(!s.localGraphOpen) },
       { label: 'View: Split', run: () => s.setView('split') },
       { label: 'View: Preview', run: () => s.setView('preview') },
       { label: 'View: Graph', run: () => s.setView('graph') },
@@ -25,6 +27,7 @@ export default function Palette() {
     ]
     if (active) {
       cmds.push(
+        { label: active.pinned ? `Unpin “${active.title}”` : `Pin “${active.title}”`, run: () => s.togglePin(active.id) },
         { label: `Export “${active.title}” as .md`, run: () => download(`${active.title}.md`, active.content, 'text/markdown') },
         { label: `Delete “${active.title}”`, run: () => s.deleteNote(active.id) },
       )
@@ -37,7 +40,7 @@ export default function Palette() {
       filtered.push({ label: `Create note “${q.trim()}”`, run: () => s.createNote(q.trim()) })
     }
     return filtered.slice(0, 12)
-  }, [q, s.notes, s.activeId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [q, s.notes, s.activeId, s.localGraphOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!s.paletteOpen) return null
   const close = () => s.setPalette(false)

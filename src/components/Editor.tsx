@@ -81,4 +81,3 @@ export default function Editor({ id, content, live }: { id: string; content: str
 
   return <div ref={host} className={`editor-wrap ${live ? 'cm-live' : 'cm-source'}`} />
 }
-

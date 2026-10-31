@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { db } from './db'
 import type { Note, ViewMode } from './types'
 import { norm, renameLinks, uniqueTitle } from './lib/text'
+import { cleanPath, inFolder, parentOf, replacePrefix } from './lib/folders'
 
 const timers = new Map<string, number>()
 function persist(note: Note) {
@@ -36,11 +37,19 @@ const WELCOME: Array<[string, string]> = [
 
 Your notes live **in this browser** (IndexedDB). Nothing is uploaded anywhere.
 
-## Basics
-- Link notes with double brackets: [[Linking notes]]
+## Writing
+- The editor renders Markdown **as you type**. Move the cursor onto a line to see its syntax.
+- Type \`[[\` to link notes, like [[Linking notes]], and \`/\` for commands (headings, tasks, tables…)
 - Add tags anywhere, like #welcome or #ideas/projects
-- Open the **Graph** view to see how your notes connect
-- Press \`Ctrl/⌘ K\` for the command palette, \`Alt N\` for a new note, \`Ctrl/⌘ E\` to flip edit/preview
+- \`Ctrl/⌘ click\` a link to open it
+
+## Organizing
+- Drag notes onto folders in the sidebar, or use the folder button to make one
+- Pin notes you use all the time
+- The **local graph** on the right shows what the current note is connected to
+
+## Shortcuts
+\`Ctrl/⌘ K\` palette · \`Alt N\` new note · \`Ctrl/⌘ E\` live/source mode
 
 ## Try it
 - [ ] Create a note
@@ -54,7 +63,7 @@ See also: [[Markdown cheatsheet]]
     'Linking notes',
     `# Linking notes
 
-Type \`[[\` and start typing to pick a note. Clicking a link to a note that doesn't exist yet creates it.
+Type \`[[\` and start typing to pick a note. \`Ctrl/⌘ click\` a link to a note that doesn't exist yet to create it.
 
 Aliases work too: [[Welcome to MindMesh|go back home]].
 
@@ -87,14 +96,19 @@ Back to [[Welcome to MindMesh]].
   ],
 ]
 
+type ImportItem = Pick<Note, 'title' | 'content'> & Partial<Note>
+
 type State = {
   ready: boolean
   notes: Note[]
+  folders: string[]
   activeId: string | null
   openIds: string[]
   view: ViewMode
   sidebarOpen: boolean
   paletteOpen: boolean
+  localGraphOpen: boolean
+  localDepth: number
   theme: Theme
   saving: boolean
   toasts: Toast[]
@@ -103,7 +117,7 @@ type State = {
   dismissToast: (id: number) => void
   restoreNote: (note: Note) => void
   load: () => Promise<void>
-  createNote: (title?: string, content?: string) => string
+  createNote: (title?: string, content?: string, folder?: string) => string
   updateContent: (id: string, content: string) => void
   renameNote: (id: string, title: string) => void
   deleteNote: (id: string) => void
@@ -113,18 +127,28 @@ type State = {
   setView: (v: ViewMode) => void
   toggleSidebar: () => void
   setPalette: (open: boolean) => void
-  importNotes: (items: Array<Pick<Note, 'title' | 'content'> & Partial<Note>>) => number
+  setLocalGraph: (open: boolean) => void
+  setLocalDepth: (n: number) => void
+  togglePin: (id: string) => void
+  moveNote: (id: string, folder: string) => void
+  createFolder: (path: string) => void
+  renameFolder: (oldPath: string, newPath: string) => void
+  deleteFolder: (path: string) => void
+  importNotes: (items: ImportItem[], folders?: string[]) => number
   dailyNote: () => void
 }
 
 export const useStore = create<State>((set, get) => ({
   ready: false,
   notes: [],
+  folders: [],
   activeId: null,
   openIds: [],
-  view: 'split',
+  view: 'live',
   sidebarOpen: window.innerWidth > 800,
   paletteOpen: false,
+  localGraphOpen: (localStorage.getItem('mindmesh:lg') ?? (window.innerWidth > 1100 ? '1' : '0')) === '1',
+  localDepth: Number(localStorage.getItem('mindmesh:lgdepth')) || 2,
   theme: (localStorage.getItem('mindmesh:theme') as Theme | null)
     ?? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'),
   saving: false,
@@ -158,6 +182,7 @@ export const useStore = create<State>((set, get) => ({
 
   async load() {
     let notes = await db.notes.toArray()
+    const folders = (await db.folders.toArray()).map((f) => f.path)
     if (notes.length === 0) {
       const now = Date.now()
       notes = WELCOME.map(([title, content], i) => ({
@@ -167,10 +192,10 @@ export const useStore = create<State>((set, get) => ({
     }
     const lastId = localStorage.getItem('mindmesh:last')
     const first = notes.find((n) => n.id === lastId) ?? notes.find((n) => n.title === 'Welcome to MindMesh') ?? notes[0]
-    set({ notes, ready: true, activeId: first.id, openIds: [first.id] })
+    set({ notes, folders, ready: true, activeId: first.id, openIds: [first.id] })
   },
 
-  createNote(title = 'Untitled', content) {
+  createNote(title = 'Untitled', content, folder) {
     const { notes } = get()
     const finalTitle = uniqueTitle(title, notes)
     const now = Date.now()
@@ -178,13 +203,14 @@ export const useStore = create<State>((set, get) => ({
       id: uid(), title: finalTitle,
       content: content ?? `# ${finalTitle}\n\n`,
       createdAt: now, updatedAt: now,
+      ...(folder ? { folder: cleanPath(folder) } : {}),
     }
     void db.notes.put(note)
     set((s) => ({
       notes: [note, ...s.notes],
       activeId: note.id,
       openIds: [...s.openIds, note.id],
-      view: s.view === 'graph' ? 'split' : s.view,
+      view: s.view === 'graph' ? 'live' : s.view,
     }))
     return note.id
   },
@@ -239,7 +265,7 @@ export const useStore = create<State>((set, get) => ({
     set((s) => ({
       activeId: id,
       openIds: s.openIds.includes(id) ? s.openIds : [...s.openIds, id],
-      view: s.view === 'graph' ? 'split' : s.view,
+      view: s.view === 'graph' ? 'live' : s.view,
     }))
   },
 
@@ -260,21 +286,101 @@ export const useStore = create<State>((set, get) => ({
   setView: (view) => set({ view }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setPalette: (paletteOpen) => set({ paletteOpen }),
+  setLocalGraph(open) { localStorage.setItem('mindmesh:lg', open ? '1' : '0'); set({ localGraphOpen: open }) },
+  setLocalDepth(n) { localStorage.setItem('mindmesh:lgdepth', String(n)); set({ localDepth: n }) },
 
-  importNotes(items) {
+  togglePin(id) {
+    let updated: Note | undefined
+    set((s) => ({
+      notes: s.notes.map((n) => {
+        if (n.id !== id) return n
+        updated = { ...n, pinned: !n.pinned }
+        return updated
+      }),
+    }))
+    if (updated) void db.notes.put(updated)
+  },
+
+  moveNote(id, rawFolder) {
+    const folder = cleanPath(rawFolder)
+    const note = get().notes.find((n) => n.id === id)
+    if (!note || (note.folder ?? '') === folder) return
+    const { folder: _old, ...rest } = note
+    const updated: Note = folder ? { ...rest, folder } : rest
+    void db.notes.put(updated)
+    // db.put keeps removed optional keys out, so a root move really clears the folder
+    set((s) => ({ notes: s.notes.map((n) => (n.id === id ? updated : n)) }))
+  },
+
+  createFolder(raw) {
+    const path = cleanPath(raw)
+    if (!path || get().folders.includes(path)) return
+    void db.folders.put({ path })
+    set((s) => ({ folders: [...s.folders, path] }))
+  },
+
+  renameFolder(oldPath, raw) {
+    const np = cleanPath(raw)
+    if (!np || np === oldPath || np.startsWith(oldPath + '/')) return
+    const { notes, folders } = get()
+    const changed: Note[] = []
+    const nextNotes = notes.map((n) => {
+      if (n.folder && inFolder(n.folder, oldPath)) {
+        const m = { ...n, folder: replacePrefix(n.folder, oldPath, np) }
+        changed.push(m)
+        return m
+      }
+      return n
+    })
+    const nextFolders = [...new Set(folders.map((f) => (inFolder(f, oldPath) ? replacePrefix(f, oldPath, np) : f)))]
+    void db.notes.bulkPut(changed)
+    void db.folders.clear().then(() => db.folders.bulkPut(nextFolders.map((path) => ({ path }))))
+    set({ notes: nextNotes, folders: nextFolders })
+  },
+
+  deleteFolder(path) {
+    const parent = parentOf(path)
+    const { notes, folders } = get()
+    const moved: Note[] = []
+    const nextNotes = notes.map((n) => {
+      if (n.folder && inFolder(n.folder, path)) {
+        const { folder: _f, ...rest } = n
+        const m: Note = parent ? { ...rest, folder: parent } : rest
+        moved.push(m)
+        return m
+      }
+      return n
+    })
+    const nextFolders = folders.filter((f) => !inFolder(f, path))
+    void db.notes.bulkPut(moved)
+    void db.folders.clear().then(() => db.folders.bulkPut(nextFolders.map((p) => ({ path: p }))))
+    set({ notes: nextNotes, folders: nextFolders })
+    get().toast(
+      moved.length
+        ? `Folder removed. ${moved.length} note${moved.length === 1 ? '' : 's'} moved to ${parent || 'the vault root'}.`
+        : 'Folder removed',
+    )
+  },
+
+  importNotes(items, extraFolders = []) {
     const now = Date.now()
     let notes = get().notes
     const added: Note[] = []
     for (const it of items) {
       const title = uniqueTitle(it.title || 'Imported', [...notes, ...added])
+      const folder = it.folder ? cleanPath(it.folder) : ''
       added.push({
         id: uid(), title, content: it.content ?? '',
         createdAt: it.createdAt ?? now, updatedAt: it.updatedAt ?? now,
+        ...(folder ? { folder } : {}),
+        ...(it.pinned ? { pinned: true } : {}),
       })
     }
     void db.notes.bulkPut(added)
+    const newFolders = extraFolders.map(cleanPath).filter((f) => f && !get().folders.includes(f))
+    if (newFolders.length) void db.folders.bulkPut(newFolders.map((path) => ({ path })))
     notes = [...added, ...notes]
-    set({ notes })
+    set((s) => ({ notes, folders: [...s.folders, ...newFolders] }))
     return added.length
   },
 
